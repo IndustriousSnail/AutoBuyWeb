@@ -61,6 +61,8 @@
                     <el-date-picker
                             v-model="buyTime"
                             type="datetime"
+                            :editable="false"
+                            format="yyyy-MM-dd HH:mm:ss"
                             placeholder="选择秒杀开始时间">
                     </el-date-picker>
                 </div>
@@ -73,6 +75,7 @@
 <script>
     import {Loading} from 'element-ui';
     import axios from 'axios';
+    import utils from "../utils/utils"
 
     export default {
         name: "SnailMain",
@@ -143,10 +146,45 @@
                 });
             },
             startBuy() {
+                const that = this;
+                let price = null;
+                if (this.buyPrice && this.buyPrice.trim() !== "") {
+                    if (utils.isNumber(this.buyPrice)) {
+                        price = parseFloat(this.buyPrice);
+                    } else {
+                        this.$message.error('输入的抢购价格不是数字');
+                        return;
+                    }
+                } else {
+                    price = undefined;
+                }
+
+                let buyTime = null;
+                if (this.buyTime) {
+                    buyTime = Date.parse(this.buyTime)/1000;
+                }else {
+                    buyTime = undefined;
+                }
+
+
                 this.buyLoading = true;
-                this.$message({
-                    message: '抢购开始',
-                    type: 'success'
+                axios.post("/auto_buy/start_rush_buy", {
+                    buyTime: buyTime,
+                    price: price,
+                    inStock: this.buyWhenStock
+                }).then(function (resp) {
+                    if (resp.data.returnCode === 0) {
+                        that.$message({
+                            message: '抢购开始',
+                            type: 'success'
+                        });
+                    } else {
+                        that.$notify.error({
+                            title: '抢购开始失败！',
+                            message: resp.data.returnMessage
+                        });
+                        that.buyLoading = false;
+                    }
                 });
             },
         },
@@ -169,7 +207,7 @@
                         message: resp.data.returnMessage,
                         type: 'success'
                     });
-                } else if (resp.data.returnCode === 404){
+                } else if (resp.data.returnCode === 404) {
                     that.showQrImg = false;
                     that.showLoginButton = true;
                     that.showQrButton = false;

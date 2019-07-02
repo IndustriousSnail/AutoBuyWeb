@@ -7,6 +7,7 @@
 
 <script>
 import SnailMain from "./component/main";
+
 export default {
   components: {SnailMain},
   methods: {
