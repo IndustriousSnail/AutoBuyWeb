@@ -74,6 +74,16 @@
                     </div>
                 </el-card>
 
+                <el-dialog
+                        title="提示"
+                        :visible.sync="dialogVisible"
+                        width="30%">
+                    <span>{{ dialogText }}</span>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="dialogVisible = false">取 消</el-button>
+                        <el-button type="primary" @click="dialogEnter">确 定</el-button>
+                  </span>
+                </el-dialog>
             </div>
         </div>
     </div>
@@ -172,6 +182,48 @@
                     }
                 });
             },
+            rollOrderResult() {
+                const that = this;
+                // 轮询查询下单结果
+                that.orderTimerId = setInterval(() => {
+                    axios.post("/auto_buy/check_order_success").then(function (resp) {
+                        if (resp.data.returnCode !== 0) {
+                            return;
+                        }
+
+                        if (resp.data.beans === null) {
+                            // 还没成功
+                            return;
+                        }
+
+                        if (resp.data.beans === false) {
+                            // 抢购失败
+                            that.$notify.error({
+                                title: '错误',
+                                message: '可惜，抢购失败',
+                                duration: 0,
+                            });
+                            that.isBuying = false;
+                            that.buyLoading = false;
+                            clearInterval(that.orderTimerId);
+                            return;
+                        }
+
+                        if (resp.data.beans === true) {
+                            // 抢购成功
+                            that.$notify({
+                                title: '抢购成功！',
+                                message: "恭喜抢购成功，请及时去付款！",
+                                duration: 0,
+                                type: 'success'
+                            });
+                            that.isBuying = false;
+                            that.buyLoading = false;
+                            clearInterval(that.orderTimerId);
+                        }
+                    });
+                }, 3000);
+            },
             startBuy() {
                 const that = this;
                 let price = null;
@@ -193,70 +245,31 @@
                     buyTime = undefined;
                 }
 
-
-                const rollOrderResult = () => {
-                    // 轮询查询下单结果
-                    that.orderTimerId = setInterval(() => {
-                        axios.post("/auto_buy/check_order_success").then(function (resp) {
-                            if (resp.data.returnCode !== 0) {
-                                return;
-                            }
-
-                            if (resp.data.beans === null) {
-                                // 还没成功
-                                return;
-                            }
-
-                            if (resp.data.beans === false) {
-                                // 抢购失败
-                                that.$notify.error({
-                                    title: '错误',
-                                    message: '可惜，抢购失败',
-                                    duration: 0,
-                                });
-                                that.isBuying = false;
-                                that.buyLoading = false;
-                                clearInterval(that.orderTimerId);
-                                return;
-                            }
-
-                            if (resp.data.beans === true) {
-                                // 抢购成功
-                                that.$notify({
-                                    title: '抢购成功！',
-                                    message: "恭喜抢购成功，请及时去付款！",
-                                    duration: 0,
-                                    type: 'success'
-                                });
-                                that.isBuying = false;
-                                that.buyLoading = false;
-                                clearInterval(that.orderTimerId);
-                            }
-                        });
-                    }, 3000);
+                this.dialogVisible = true;
+                this.dialogText = "为了提高抢购效率，会将购物车清空，是否抢购？";
+                this.dialogFunc = () => {
+                    that.buyLoading = true;
+                    axios.post("/auto_buy/start_rush_buy", {
+                        buyTime: buyTime,
+                        price: price,
+                        inStock: this.buyWhenStock
+                    }).then(function (resp) {
+                        if (resp.data.returnCode === 0) {
+                            that.$message({
+                                message: '抢购开始',
+                                type: 'success'
+                            });
+                            that.isBuying = true;
+                            // rollOrderResult();
+                        } else {
+                            that.$notify.error({
+                                title: '抢购开始失败！',
+                                message: resp.data.returnMessage
+                            });
+                            that.buyLoading = false;
+                        }
+                    });
                 };
-
-                this.buyLoading = true;
-                axios.post("/auto_buy/start_rush_buy", {
-                    buyTime: buyTime,
-                    price: price,
-                    inStock: this.buyWhenStock
-                }).then(function (resp) {
-                    if (resp.data.returnCode === 0) {
-                        that.$message({
-                            message: '抢购开始',
-                            type: 'success'
-                        });
-                        that.isBuying = true;
-                        rollOrderResult();
-                    } else {
-                        that.$notify.error({
-                            title: '抢购开始失败！',
-                            message: resp.data.returnMessage
-                        });
-                        that.buyLoading = false;
-                    }
-                });
             },
             checkIsLogined() {
                 // 检测是否登录
@@ -302,6 +315,11 @@
                         that.$message.error('取消抢购失败');
                     }
                 });
+            },
+            dialogEnter() {
+                // 点击了dialog的确认按钮
+                this.dialogFunc(); // 执行dialog确认函数
+                this.dialogVisible = false;
             }
         },
         mounted: function () {
@@ -309,6 +327,7 @@
             axios.post("/auto_buy/check_buying").then(function (resp) {
                 if (resp.data.returnCode === 0 && resp.data.beans === true) {
                     that.isBuying = true;
+                    that.rollOrderResult();
                 } else {
                     that.isBuying = false;
                     that.checkIsLogined();
@@ -346,7 +365,10 @@
                 qrUrl: null,
                 showQrImg: false,
                 timerId: null,
-                orderTimerId: null
+                orderTimerId: null,
+                dialogText: "",
+                dialogVisible: false,
+                dialogFunc: null
             }
         }
     }
